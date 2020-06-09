@@ -7,6 +7,50 @@ from utils import get_all_data_loaders, prepare_sub_folder, write_loss, write_2i
 from torch.utils.tensorboard import SummaryWriter
 
 
+def train(it_id):
+    while True:
+        for it_idx, (image_a, image_b) in enumerate(zip(train_loader_a, train_loader_b)):
+            print(it_idx)
+
+            if torch.cuda.is_available():
+                image_a, image_b = image_a.cuda().detach(), image_b.cuda().detach()
+            else:
+                image_a, image_b = image_a.detach(), image_b.detach()
+
+            # Main training code
+            trainer.dis_update(image_a, image_b, config)
+            trainer.gen_update(image_a, image_b, config)
+            trainer.update_learning_rate()
+
+            # Dump training stats in log file
+            if (it_id + 1) % config.log_iter == 0:
+                write_loss(it_id, trainer, train_writer)
+
+            # Write images
+            if (it_id + 1) % config.image_save_iter == 0:
+                with torch.no_grad():
+                    test_image_outputs = trainer.sample(test_display_images_a, test_display_images_b)
+                    train_image_outputs = trainer.sample(train_display_images_a, train_display_images_b)
+                write_2images(test_image_outputs, display_size, image_directory, 'test_%08d' % (it_id + 1))
+                write_2images(train_image_outputs, display_size, image_directory, 'train_%08d' % (it_id + 1))
+
+                # HTML
+                write_html(output_directory + "/index.html", it_id + 1, config['image_save_iter'], 'images')
+
+            if (it_id + 1) % config.image_display_iter == 0:
+                with torch.no_grad():
+                    image_outputs = trainer.sample(train_display_images_a, train_display_images_b)
+                write_2images(image_outputs, display_size, image_directory, 'train_current')
+
+            # Save network weights
+            if (it_id + 1) % config.snapshot_save_iter == 0:
+                trainer.save(checkpoint_directory, it_id)
+
+            it_id += 1
+            if it_id >= max_iter:
+                sys.exit('Finish training')
+
+
 if __name__ == '__main__':
     config = Config().parser.parse_args()
 
@@ -40,44 +84,4 @@ if __name__ == '__main__':
     iterations = trainer.resume(checkpoint_dir=config.checkpoint, hyperparameters=config) if config.resume else 0
 
     print('Start training')
-    while True:
-        for it_idx, (image_a, image_b) in enumerate(zip(train_loader_a, train_loader_b)):
-            print(it_idx)
-
-            if torch.cuda.is_available():
-                image_a, image_b = image_a.cuda().detach(), image_b.cuda().detach()
-            else:
-                image_a, image_b = image_a.detach(), image_b.detach()
-
-            # Main training code
-            trainer.dis_update(image_a, image_b, config)
-            trainer.gen_update(image_a, image_b, config)
-            trainer.update_learning_rate()
-
-            # Dump training stats in log file
-            if (iterations + 1) % config.log_iter == 0:
-                write_loss(iterations, trainer, train_writer)
-
-            # Write images
-            if (iterations + 1) % config.image_save_iter == 0:
-                with torch.no_grad():
-                    test_image_outputs = trainer.sample(test_display_images_a, test_display_images_b)
-                    train_image_outputs = trainer.sample(train_display_images_a, train_display_images_b)
-                write_2images(test_image_outputs, display_size, image_directory, 'test_%08d' % (iterations + 1))
-                write_2images(train_image_outputs, display_size, image_directory, 'train_%08d' % (iterations + 1))
-
-                # HTML
-                write_html(output_directory + "/index.html", iterations + 1, config['image_save_iter'], 'images')
-
-            if (iterations + 1) % config.image_display_iter == 0:
-                with torch.no_grad():
-                    image_outputs = trainer.sample(train_display_images_a, train_display_images_b)
-                write_2images(image_outputs, display_size, image_directory, 'train_current')
-
-            # Save network weights
-            if (iterations + 1) % config.snapshot_save_iter == 0:
-                trainer.save(checkpoint_directory, iterations)
-
-            iterations += 1
-            if iterations >= max_iter:
-                sys.exit('Finish training')
+    train(iterations)

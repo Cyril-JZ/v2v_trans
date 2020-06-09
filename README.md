@@ -1,4 +1,34 @@
-# video-to-video translation on Deep Generative Models class
+# Video-to-video Translation on Deep Generative Models class
 
-## Usage
+### Dependencies
+
+- Python 3.6
+- PyTorch >= 1.0
+- Torchvision >= 0.2
+
+### Usage
+
+For training, run
+
+```shell
 bash ./train_oilpainting_with_temporal_loss.sh
+```
+
+For evaluating, run
+
+```shell
+bash ./test_oilpainting.sh
+```
+
+### Prepare Data
+
+
+
+### Results
+
+
+
+
+
+
+

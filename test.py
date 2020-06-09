@@ -8,10 +8,9 @@ from trainer import Trainer
 from config import Config
 from data import ImageFolder
 from utils import load_inception, get_data_loader_folder
-from torchvision import transforms
 from scipy.stats import entropy
 from torch.autograd import Variable
-from PIL import Image
+
 
 if __name__ == '__main__':
     config = Config().parser.parse_args()
@@ -22,9 +21,6 @@ if __name__ == '__main__':
     torch.manual_seed(seed)
     if torch.cuda.is_available():
         torch.cuda.manual_seed(seed)
-
-    # if not os.path.exists(config.output_folder):
-    #     os.makedirs(config.output_folder)
 
     # Load experiment setting
     config.num_style = 1 if config.style != '' else config.num_style

@@ -1,7 +1,3 @@
-"""
-Copyright (C) 2018 NVIDIA Corporation.  All rights reserved.
-Licensed under the CC BY-NC-SA 4.0 license (https://creativecommons.org/licenses/by-nc-sa/4.0/legalcode).
-"""
 from torch.utils.data import DataLoader
 from networks import Vgg16
 from torch.autograd import Variable
@@ -18,26 +14,6 @@ import numpy as np
 import torch.nn.init as init
 import time
 
-
-# Methods
-# get_all_data_loaders      : primary data loader interface (load trainA, testA, trainB, testB)
-# get_data_loader_list      : list-based data loader
-# get_data_loader_folder    : folder-based data loader
-# get_config                : load yaml file
-# eformat                   :
-# write_2images             : save output image
-# prepare_sub_folder        : create checkpoints and images folders for saving outputs
-# write_one_row_html        : write one row of the html file for output images
-# write_html                : create the html file.
-# write_loss
-# slerp
-# get_slerp_interp
-# get_model_list
-# load_vgg16
-# load_inception
-# vgg_preprocess
-# get_scheduler
-# weights_init
 
 def get_all_data_loaders(conf):
     batch_size = conf.batch_size
