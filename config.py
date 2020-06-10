@@ -31,8 +31,6 @@ class Config:
                         help='initialization [gaussian/kaiming/xavier/orthogonal]')
     parser.add_argument('--lr', default=0.0001, type=float,
                         help='initial learning rate')
-    parser.add_argument('--lr_policy', default='step', type=str,
-                        help='learning rate scheduler')
     parser.add_argument('--step_size', default=100000, type=int,
                         help='how often to decay learning rate')
     parser.add_argument('--gamma', default=0.5, type=float,
@@ -121,9 +119,6 @@ class Config:
     parser.add_argument('--synchronized', action='store_true', help="whether use synchronized style code or not")
     parser.add_argument('--output_only', action='store_true',
                         help="whether only save the output images or also save the input images")
-    parser.add_argument('--compute_IS', action='store_true', help="whether to compute Inception Score or not")
-    parser.add_argument('--compute_CIS', action='store_true',
-                        help="whether to compute Conditional Inception Score or not")
     parser.add_argument('--inception_a', type=str, default='.',
                         help="path to the pretrained inception network for domain A")
     parser.add_argument('--inception_b', type=str, default='.',

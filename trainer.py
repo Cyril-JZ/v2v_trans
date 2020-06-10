@@ -6,40 +6,32 @@ from networks import AdaINGen, MsImageDis
 from utils import weights_init, get_model_list, vgg_preprocess, load_vgg16, get_scheduler
 from comp_loss import TemporalLoss
 from torch.autograd import Variable
+from networks import Vgg16
 
 
 class Trainer(nn.Module):
     def __init__(self, hps, use_global=False):
         super(Trainer, self).__init__()
-        lr = hps.lr
         # Initiate the networks
-        self.gen_a = AdaINGen(hps.input_dim_a, hps,
-                              use_global)  # auto-encoder for domain a
-        self.gen_b = AdaINGen(hps.input_dim_b, hps,
-                              use_global)  # auto-encoder for domain b
+        self.gen_a = AdaINGen(hps.input_dim_a, hps, use_global)  # auto-encoder for domain a
+        self.gen_b = AdaINGen(hps.input_dim_b, hps, use_global)  # auto-encoder for domain b
         self.dis_a = MsImageDis(hps.input_dim_a, hps)  # discriminator for domain a
         self.dis_b = MsImageDis(hps.input_dim_b, hps)  # discriminator for domain b
         self.instancenorm = nn.InstanceNorm2d(512, affine=False)
         self.style_dim = hps.gen_style_dim
 
+        self.device = torch.device('cuda:0') if torch.cuda.is_available() else torch.device('cpu')
         # fix the noise used in sampling
-        display_size = int(hps.display_size)
-        if torch.cuda.is_available():
-            self.s_a = torch.randn(display_size, self.style_dim, 1, 1).cuda()
-            self.s_b = torch.randn(display_size, self.style_dim, 1, 1).cuda()
-        else:
-            self.s_a = torch.randn(display_size, self.style_dim, 1, 1)
-            self.s_b = torch.randn(display_size, self.style_dim, 1, 1)
+        self.s_a = nn.Parameter(torch.randn(hps.display_size, self.style_dim, 1, 1).to(self.device))
+        self.s_b = nn.Parameter(torch.randn(hps.display_size, self.style_dim, 1, 1).to(self.device))
 
         # Setup the optimizers
-        beta1 = hps.beta1
-        beta2 = hps.beta2
         dis_params = list(self.dis_a.parameters()) + list(self.dis_b.parameters())
         gen_params = list(self.gen_a.parameters()) + list(self.gen_b.parameters())
         self.dis_opt = torch.optim.Adam([p for p in dis_params if p.requires_grad],
-                                        lr=lr, betas=(beta1, beta2), weight_decay=hps.weight_decay)
+                                        lr=hps.lr, betas=(hps.beta1, hps.beta2), weight_decay=hps.weight_decay)
         self.gen_opt = torch.optim.Adam([p for p in gen_params if p.requires_grad],
-                                        lr=lr, betas=(beta1, beta2), weight_decay=hps.weight_decay)
+                                        lr=hps.lr, betas=(hps.beta1, hps.beta2), weight_decay=hps.weight_decay)
         self.dis_scheduler = get_scheduler(self.dis_opt, hps)
         self.gen_scheduler = get_scheduler(self.gen_opt, hps)
 
@@ -50,7 +42,7 @@ class Trainer(nn.Module):
 
         # Load VGG model if needed
         if hps.vgg_w > 0:
-            self.vgg = load_vgg16(hps.vgg_model_path + '/models')
+            self.vgg = Vgg16()
             self.vgg.eval()
             for param in self.vgg.parameters():
                 param.requires_grad = False
@@ -63,23 +55,17 @@ class Trainer(nn.Module):
 
     def forward(self, x_a, x_b):
         self.eval()
-        s_a = Variable(self.s_a)
-        s_b = Variable(self.s_b)
         c_a, s_a_fake = self.gen_a.encode(x_a)
         c_b, s_b_fake = self.gen_b.encode(x_b)
-        x_ba = self.gen_a.decode(c_b, s_a)
-        x_ab = self.gen_b.decode(c_a, s_b)
+        x_ba = self.gen_a.decode(c_b, self.s_a)
+        x_ab = self.gen_b.decode(c_a, self.s_b)
         self.train()
         return x_ab, x_ba
 
     def gen_update(self, x_a, x_b, hps):
         self.gen_opt.zero_grad()
-        if torch.cuda.is_available():
-            s_a = Variable(torch.randn(x_a.size(0), self.style_dim, 1, 1).cuda())
-            s_b = Variable(torch.randn(x_b.size(0), self.style_dim, 1, 1).cuda())
-        else:
-            s_a = Variable(torch.randn(x_a.size(0), self.style_dim, 1, 1))
-            s_b = Variable(torch.randn(x_b.size(0), self.style_dim, 1, 1))
+        s_a = Variable(torch.randn(x_a.size(0), self.style_dim, 1, 1).to(self.device))
+        s_b = Variable(torch.randn(x_b.size(0), self.style_dim, 1, 1).to(self.device))
         # encode
         c_a, s_a_prime = self.gen_a.encode(x_a)
         c_b, s_b_prime = self.gen_b.encode(x_b)
@@ -170,8 +156,6 @@ class Trainer(nn.Module):
 
     def sample(self, x_a, x_b):
         self.eval()
-        s_a1 = Variable(self.s_a)
-        s_b1 = Variable(self.s_b)
 
         if torch.cuda.is_available():
             s_a2 = Variable(torch.randn(x_a.size(0), self.style_dim, 1, 1).cuda())
@@ -186,9 +170,9 @@ class Trainer(nn.Module):
             c_b, s_b_fake = self.gen_b.encode(x_b[i].unsqueeze(0))
             x_a_recon.append(self.gen_a.decode(c_a, s_a_fake))
             x_b_recon.append(self.gen_b.decode(c_b, s_b_fake))
-            x_ba1.append(self.gen_a.decode(c_b, s_a1[i].unsqueeze(0)))
+            x_ba1.append(self.gen_a.decode(c_b, self.s_a[i].unsqueeze(0)))
             x_ba2.append(self.gen_a.decode(c_b, s_a2[i].unsqueeze(0)))
-            x_ab1.append(self.gen_b.decode(c_a, s_b1[i].unsqueeze(0)))
+            x_ab1.append(self.gen_b.decode(c_a, self.s_b[i].unsqueeze(0)))
             x_ab2.append(self.gen_b.decode(c_a, s_b2[i].unsqueeze(0)))
         x_a_recon, x_b_recon = torch.cat(x_a_recon), torch.cat(x_b_recon)
         x_ba1, x_ba2 = torch.cat(x_ba1), torch.cat(x_ba2)
@@ -199,12 +183,8 @@ class Trainer(nn.Module):
     def dis_update(self, x_a, x_b, hps):
         self.dis_opt.zero_grad()
 
-        if torch.cuda.is_available():
-            s_a = Variable(torch.randn(x_a.size(0), self.style_dim, 1, 1).cuda())
-            s_b = Variable(torch.randn(x_b.size(0), self.style_dim, 1, 1).cuda())
-        else:
-            s_a = Variable(torch.randn(x_a.size(0), self.style_dim, 1, 1))
-            s_b = Variable(torch.randn(x_b.size(0), self.style_dim, 1, 1))
+        s_a = Variable(torch.randn(x_a.size(0), self.style_dim, 1, 1).to(self.device))
+        s_b = Variable(torch.randn(x_b.size(0), self.style_dim, 1, 1).to(self.device))
 
         # encode
         c_a, _ = self.gen_a.encode(x_a)

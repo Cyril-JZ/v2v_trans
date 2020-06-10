@@ -27,15 +27,6 @@ if __name__ == '__main__':
     device = torch.device('cuda:0') if torch.cuda.is_available() else torch.device('cpu')
     input_dim = config.input_dim_a if config.a2b else config.input_dim_b
 
-    # Load the inception networks if we need to compute IS or CIIS
-    if config.compute_IS or config.compute_IS:
-        inception = load_inception(config.inception_b) if config.a2b else load_inception(config.inception_a)
-        # freeze the inception models and set eval mode
-        inception.eval()
-        for param in inception.parameters():
-            param.requires_grad = False
-        inception_up = nn.Upsample(size=(299, 299), mode='bilinear')
-
     # Setup model and data loader
     image_names = ImageFolder(config.input_folder, transform=None, return_paths=True)
     data_loader = get_data_loader_folder(config.input_folder, 1, False, new_size=256, crop=False)

@@ -1,5 +1,4 @@
 from torch.utils.data import DataLoader
-from networks import Vgg16
 from torch.autograd import Variable
 from torch.optim import lr_scheduler
 from torchvision import transforms
@@ -60,18 +59,6 @@ def get_data_loader_folder(input_folder, batch_size, train, new_size=None,
     dataset = ImageFolder(input_folder, transform=transform, train=train)
     loader = DataLoader(dataset=dataset, batch_size=batch_size, shuffle=train, drop_last=True, num_workers=num_workers)
     return loader
-
-
-def get_config(config):
-    with open(config, 'r') as stream:
-        return yaml.load(stream, Loader=yaml.FullLoader)
-
-
-def eformat(f, prec):
-    s = "%.*e" % (prec, f)
-    mantissa, exp = s.split('e')
-    # add 1 to digits as 1 is taken by sign +/-
-    return "%se%d" % (mantissa, int(exp))
 
 
 def __write_images(image_outputs, display_image_num, file_name):
@@ -142,35 +129,6 @@ def write_loss(iterations, trainer, train_writer):
         train_writer.add_scalar(m, getattr(trainer, m), iterations + 1)
 
 
-def slerp(val, low, high):
-    """
-    original: Animating Rotation with Quaternion Curves, Ken Shoemake
-    https://arxiv.org/abs/1609.04468
-    Code: https://github.com/soumith/dcgan.torch/issues/14, Tom White
-    """
-    omega = np.arccos(np.dot(low / np.linalg.norm(low), high / np.linalg.norm(high)))
-    so = np.sin(omega)
-    return np.sin((1.0 - val) * omega) / so * low + np.sin(val * omega) / so * high
-
-
-def get_slerp_interp(nb_latents, nb_interp, z_dim):
-    """
-    modified from: PyTorch inference for "Progressive Growing of GANs" with CelebA snapshot
-    https://github.com/ptrblck/prog_gans_pytorch_inference
-    """
-
-    latent_interps = np.empty(shape=(0, z_dim), dtype=np.float32)
-    for _ in range(nb_latents):
-        low = np.random.randn(z_dim)
-        high = np.random.randn(z_dim)  # low + np.random.randn(512) * 0.7
-        interp_vals = np.linspace(0, 1, num=nb_interp)
-        latent_interp = np.array([slerp(v, low, high) for v in interp_vals],
-                                 dtype=np.float32)
-        latent_interps = np.vstack((latent_interps, latent_interp))
-
-    return latent_interps[:, :, np.newaxis, np.newaxis]
-
-
 # Get model list for resume
 def get_model_list(dirname, key):
     if os.path.exists(dirname) is False:
@@ -182,34 +140,6 @@ def get_model_list(dirname, key):
     gen_models.sort()
     last_model_name = gen_models[-1]
     return last_model_name
-
-
-def load_vgg16(model_dir):
-    # """ Use the model from https://github.com/abhiskk/fast-neural-style/blob/master/neural_style/utils.py """
-    # if not os.path.exists(model_dir):
-    #     os.mkdir(model_dir)
-    # if not os.path.exists(os.path.join(model_dir, 'vgg16.weight')):
-    #     if not os.path.exists(os.path.join(model_dir, 'vgg16.t7')):
-    #         os.system('wget https://www.dropbox.com/s/76l3rt4kyi3s8x7/vgg16.t7?dl=1 -O ' + os.path.join(model_dir, 'vgg16.t7'))
-    #     vgglua = load_lua(os.path.join(model_dir, 'vgg16.t7'))
-    #     vgg = Vgg16()
-    #     for (src, dst) in zip(vgglua.parameters()[0], vgg.parameters()):
-    #         dst.data[:] = src
-    #     torch.save(vgg.state_dict(), os.path.join(model_dir, 'vgg16.weight'))
-    # vgg.load_state_dict(torch.load(os.path.join(model_dir, 'vgg16.weight')))
-    return Vgg16()
-
-
-def load_inception(model_path):
-    state_dict = torch.load(model_path)
-    model = inception_v3(pretrained=False, transform_input=True)
-    model.aux_logits = False
-    num_ftrs = model.fc.in_features
-    model.fc = nn.Linear(num_ftrs, state_dict['fc.weight'].size(0))
-    model.load_state_dict(state_dict)
-    for param in model.parameters():
-        param.requires_grad = False
-    return model
 
 
 def vgg_preprocess(batch):
@@ -226,14 +156,8 @@ def vgg_preprocess(batch):
 
 
 def get_scheduler(optimizer, hps, iterations=-1):
-    if hps.lr_policy == 'constant':
-        scheduler = None  # constant scheduler
-    elif hps.lr_policy == 'step':
-        scheduler = lr_scheduler.StepLR(optimizer, step_size=hps.step_size,
-                                        gamma=hps.gamma, last_epoch=iterations)
-    else:
-        return NotImplementedError('learning rate policy [%s] is not implemented', hps['lr_policy'])
-    return scheduler
+    return lr_scheduler.StepLR(optimizer, step_size=hps.step_size, gamma=hps.gamma,
+                               last_epoch=iterations)
 
 
 def weights_init(init_type='gaussian'):
@@ -257,97 +181,3 @@ def weights_init(init_type='gaussian'):
                 init.constant_(m.bias.data, 0.0)
 
     return init_fun
-
-
-class Timer:
-    def __init__(self, msg):
-        self.msg = msg
-        self.start_time = None
-
-    def __enter__(self):
-        self.start_time = time.time()
-
-    def __exit__(self, exc_type, exc_value, exc_tb):
-        print(self.msg % (time.time() - self.start_time))
-
-
-def pytorch03_to_pytorch04(state_dict_base, trainer_name):
-    def __conversion_core(state_dict_base, trainer_name):
-        state_dict = state_dict_base.copy()
-        if trainer_name == 'MUNIT':
-            for key, value in state_dict_base.items():
-                if key.endswith(('enc_content.model.0.norm.running_mean',
-                                 'enc_content.model.0.norm.running_var',
-                                 'enc_content.model.1.norm.running_mean',
-                                 'enc_content.model.1.norm.running_var',
-                                 'enc_content.model.2.norm.running_mean',
-                                 'enc_content.model.2.norm.running_var',
-                                 'enc_content.model.3.model.0.model.1.norm.running_mean',
-                                 'enc_content.model.3.model.0.model.1.norm.running_var',
-                                 'enc_content.model.3.model.0.model.0.norm.running_mean',
-                                 'enc_content.model.3.model.0.model.0.norm.running_var',
-                                 'enc_content.model.3.model.1.model.1.norm.running_mean',
-                                 'enc_content.model.3.model.1.model.1.norm.running_var',
-                                 'enc_content.model.3.model.1.model.0.norm.running_mean',
-                                 'enc_content.model.3.model.1.model.0.norm.running_var',
-                                 'enc_content.model.3.model.2.model.1.norm.running_mean',
-                                 'enc_content.model.3.model.2.model.1.norm.running_var',
-                                 'enc_content.model.3.model.2.model.0.norm.running_mean',
-                                 'enc_content.model.3.model.2.model.0.norm.running_var',
-                                 'enc_content.model.3.model.3.model.1.norm.running_mean',
-                                 'enc_content.model.3.model.3.model.1.norm.running_var',
-                                 'enc_content.model.3.model.3.model.0.norm.running_mean',
-                                 'enc_content.model.3.model.3.model.0.norm.running_var',
-                                 )):
-                    del state_dict[key]
-        else:
-            def __conversion_core(state_dict_base):
-                state_dict = state_dict_base.copy()
-                for key, value in state_dict_base.items():
-                    if key.endswith(('enc.model.0.norm.running_mean',
-                                     'enc.model.0.norm.running_var',
-                                     'enc.model.1.norm.running_mean',
-                                     'enc.model.1.norm.running_var',
-                                     'enc.model.2.norm.running_mean',
-                                     'enc.model.2.norm.running_var',
-                                     'enc.model.3.model.0.model.1.norm.running_mean',
-                                     'enc.model.3.model.0.model.1.norm.running_var',
-                                     'enc.model.3.model.0.model.0.norm.running_mean',
-                                     'enc.model.3.model.0.model.0.norm.running_var',
-                                     'enc.model.3.model.1.model.1.norm.running_mean',
-                                     'enc.model.3.model.1.model.1.norm.running_var',
-                                     'enc.model.3.model.1.model.0.norm.running_mean',
-                                     'enc.model.3.model.1.model.0.norm.running_var',
-                                     'enc.model.3.model.2.model.1.norm.running_mean',
-                                     'enc.model.3.model.2.model.1.norm.running_var',
-                                     'enc.model.3.model.2.model.0.norm.running_mean',
-                                     'enc.model.3.model.2.model.0.norm.running_var',
-                                     'enc.model.3.model.3.model.1.norm.running_mean',
-                                     'enc.model.3.model.3.model.1.norm.running_var',
-                                     'enc.model.3.model.3.model.0.norm.running_mean',
-                                     'enc.model.3.model.3.model.0.norm.running_var',
-
-                                     'dec.model.0.model.0.model.1.norm.running_mean',
-                                     'dec.model.0.model.0.model.1.norm.running_var',
-                                     'dec.model.0.model.0.model.0.norm.running_mean',
-                                     'dec.model.0.model.0.model.0.norm.running_var',
-                                     'dec.model.0.model.1.model.1.norm.running_mean',
-                                     'dec.model.0.model.1.model.1.norm.running_var',
-                                     'dec.model.0.model.1.model.0.norm.running_mean',
-                                     'dec.model.0.model.1.model.0.norm.running_var',
-                                     'dec.model.0.model.2.model.1.norm.running_mean',
-                                     'dec.model.0.model.2.model.1.norm.running_var',
-                                     'dec.model.0.model.2.model.0.norm.running_mean',
-                                     'dec.model.0.model.2.model.0.norm.running_var',
-                                     'dec.model.0.model.3.model.1.norm.running_mean',
-                                     'dec.model.0.model.3.model.1.norm.running_var',
-                                     'dec.model.0.model.3.model.0.norm.running_mean',
-                                     'dec.model.0.model.3.model.0.norm.running_var',
-                                     )):
-                        del state_dict[key]
-        return state_dict
-
-    state_dict = dict()
-    state_dict['a'] = __conversion_core(state_dict_base['a'], trainer_name)
-    state_dict['b'] = __conversion_core(state_dict_base['b'], trainer_name)
-    return state_dict
