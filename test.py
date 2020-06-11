@@ -1,7 +1,7 @@
 import os
 import torch
 import torchvision.utils as vutils
-from model import Model
+from model import V2VModel
 from config import Config
 from data import ImageFolder
 from utils import get_data_loader_folder
@@ -28,7 +28,7 @@ if __name__ == '__main__':
     image_names = ImageFolder(config.input_folder, return_paths=True)
     data_loader = get_data_loader_folder(config.input_folder, 1, False)
 
-    model = Model(config).to(device)
+    model = V2VModel(config).to(device)
     state_dict = torch.load(config.checkpoint)
     model.gen_a.load_state_dict(state_dict['a'])
     model.gen_b.load_state_dict(state_dict['b'])

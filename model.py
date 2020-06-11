@@ -2,6 +2,7 @@ import os
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import torch.optim as optim
 from utils import weights_init, get_model_list, get_scheduler
 from comp_loss import TemporalLoss
 from torch.autograd import Variable
@@ -72,10 +73,10 @@ class Decoder(nn.Module):
 
 
 # Generator
-class AdaINGen(nn.Module):
+class Generator(nn.Module):
     # AdaIN auto-encoder architecture
     def __init__(self, input_dim, hps, use_global=False):
-        super(AdaINGen, self).__init__()
+        super(Generator, self).__init__()
         dim = hps.gen_dim
         style_dim = hps.gen_style_dim
         n_downsample = hps.gen_n_downsample
@@ -141,10 +142,10 @@ class AdaINGen(nn.Module):
 
 
 # Discriminator
-class MsImageDis(nn.Module):
+class Discriminator(nn.Module):
     # Multi-scale discriminator architecture
     def __init__(self, input_dim, hps):
-        super(MsImageDis, self).__init__()
+        super(Discriminator, self).__init__()
         self.n_layer = hps.dis_n_layer
         self.gan_type = hps.dis_gan_type
         self.dim = hps.dis_dim
@@ -211,29 +212,29 @@ class MsImageDis(nn.Module):
         return loss
 
 
-class Model(nn.Module):
+class V2VModel(nn.Module):
     def __init__(self, hps, use_global=False):
-        super(Model, self).__init__()
+        super(V2VModel, self).__init__()
 
         # Model config
         self.device = torch.device('cuda:0') if torch.cuda.is_available() else torch.device('cpu')
         self.style_dim = hps.gen_style_dim
 
         # Initialization
-        self.gen_a = AdaINGen(hps.input_dim_a, hps, use_global)  # auto-encoder for domain a
-        self.gen_b = AdaINGen(hps.input_dim_b, hps, use_global)  # auto-encoder for domain b
-        self.dis_a = MsImageDis(hps.input_dim_a, hps)  # discriminator for domain a
-        self.dis_b = MsImageDis(hps.input_dim_b, hps)  # discriminator for domain b
+        self.gen_a = Generator(hps.input_dim_a, hps, use_global)  # auto-encoder for domain a
+        self.gen_b = Generator(hps.input_dim_b, hps, use_global)  # auto-encoder for domain b
+        self.dis_a = Discriminator(hps.input_dim_a, hps)  # discriminator for domain a
+        self.dis_b = Discriminator(hps.input_dim_b, hps)  # discriminator for domain b
 
         # Setup the optimizers
         dis_params = list(self.dis_a.parameters()) + list(self.dis_b.parameters())
         gen_params = list(self.gen_a.parameters()) + list(self.gen_b.parameters())
-        self.dis_opt = torch.optim.Adam([p for p in dis_params if p.requires_grad],
+        self.dis_optimizer = optim.Adam([p for p in dis_params if p.requires_grad],
                                         lr=hps.lr, betas=(hps.beta1, hps.beta2), weight_decay=hps.weight_decay)
-        self.gen_opt = torch.optim.Adam([p for p in gen_params if p.requires_grad],
+        self.gen_optimizer = optim.Adam([p for p in gen_params if p.requires_grad],
                                         lr=hps.lr, betas=(hps.beta1, hps.beta2), weight_decay=hps.weight_decay)
-        self.dis_scheduler = get_scheduler(self.dis_opt, hps)
-        self.gen_scheduler = get_scheduler(self.gen_opt, hps)
+        self.dis_scheduler = get_scheduler(self.dis_optimizer, hps)
+        self.gen_scheduler = get_scheduler(self.gen_optimizer, hps)
 
         if hps.g_comp > 0:
             self.temp_loss = TemporalLoss()
@@ -243,7 +244,7 @@ class Model(nn.Module):
         self.dis_a.apply(weights_init('gaussian'))
         self.dis_b.apply(weights_init('gaussian'))
 
-    def recon_criterion(self, inp, target):
+    def recons_loss(self, inp, target):
         return torch.mean(torch.abs(inp - target))
 
     def gen_update(self, x_a, x_b, hps):
@@ -300,14 +301,14 @@ class Model(nn.Module):
         self.loss_gen_adv_b = self.dis_b.calc_gen_loss(x_ab)
 
         # reconstruction loss (x, s, c, cycle)
-        self.loss_gen_recon_x_a = self.recon_criterion(x_a_recon, x_a)
-        self.loss_gen_recon_x_b = self.recon_criterion(x_b_recon, x_b)
-        self.loss_gen_recon_s_a = self.recon_criterion(s_a_recon, s_a)
-        self.loss_gen_recon_s_b = self.recon_criterion(s_b_recon, s_b)
-        self.loss_gen_recon_c_a = self.recon_criterion(c_a_recon, c_a)
-        self.loss_gen_recon_c_b = self.recon_criterion(c_b_recon, c_b)
-        self.loss_gen_cycrecon_x_a = self.recon_criterion(x_aba, x_a) if hps.recon_x_cyc_w > 0 else 0
-        self.loss_gen_cycrecon_x_b = self.recon_criterion(x_bab, x_b) if hps.recon_x_cyc_w > 0 else 0
+        self.loss_gen_recon_x_a = self.recons_loss(x_a_recon, x_a)
+        self.loss_gen_recon_x_b = self.recons_loss(x_b_recon, x_b)
+        self.loss_gen_recon_s_a = self.recons_loss(s_a_recon, s_a)
+        self.loss_gen_recon_s_b = self.recons_loss(s_b_recon, s_b)
+        self.loss_gen_recon_c_a = self.recons_loss(c_a_recon, c_a)
+        self.loss_gen_recon_c_b = self.recons_loss(c_b_recon, c_b)
+        self.loss_gen_cycrecon_x_a = self.recons_loss(x_aba, x_a) if hps.recon_x_cyc_w > 0 else 0
+        self.loss_gen_cycrecon_x_b = self.recons_loss(x_bab, x_b) if hps.recon_x_cyc_w > 0 else 0
 
         # G temp loss
         self.loss_gen_temp_a = self.temp_loss(x_a_recon, second_x_a_recon, flow_a) if hps.g_comp > 0 else 0
@@ -323,7 +324,7 @@ class Model(nn.Module):
                 hps.recon_c_w * (self.loss_gen_recon_c_a + self.loss_gen_recon_c_b) +
                 hps.recon_x_cyc_w * (self.loss_gen_cycrecon_x_a + self.loss_gen_cycrecon_x_b) +
                 hps.g_comp * (
-                            self.loss_gen_temp_a + self.loss_gen_temp_aba + self.loss_gen_temp_b + self.loss_gen_temp_bab)
+                        self.loss_gen_temp_a + self.loss_gen_temp_aba + self.loss_gen_temp_b + self.loss_gen_temp_bab)
         )
 
         self.loss_gen_total.backward()

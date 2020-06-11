@@ -2,15 +2,15 @@ import torch
 import os
 import sys
 from config import Config
-from model import Model
+from model import V2VModel
 from utils import get_all_data_loaders, prepare_sub_folder, write_loss
 from torch.utils.tensorboard import SummaryWriter
 
 
 def train(it_id):
     while True:
-        for it_idx, (image_a, image_b) in enumerate(zip(train_loader_a, train_loader_b)):
-            # print(it_idx)
+        for idx, (image_a, image_b) in enumerate(zip(train_loader_a, train_loader_b)):
+            # print(idx)
 
             # obtain input image pairs
             image_a = image_a.cuda().detach() if torch.cuda.is_available() else image_a.detach()
@@ -32,6 +32,7 @@ def train(it_id):
             if (it_id + 1) % config.snapshot_save_iter == 0:
                 model.save(checkpoint_directory, it_id)
 
+            it_id += 1
             if it_id + 1 >= max_iter:
                 sys.exit('Finish training')
 
@@ -55,7 +56,7 @@ if __name__ == '__main__':
     train_display_images_b = torch.stack([train_loader_b.dataset[i] for i in range(display_size)]).to(device)
 
     # Main models
-    model = Model(config).to(device)
+    model = V2VModel(config).to(device)
 
     # Setup logger and output folders
     model_name = config.model_name
