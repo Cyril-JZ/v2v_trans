@@ -5,10 +5,6 @@ class Config:
     parser = argparse.ArgumentParser()
 
     # logger options
-    parser.add_argument('--image_save_iter', default=10000, type=int,
-                        help='How often do you want to save output images during training')
-    parser.add_argument('--image_display_iter', default=100, type=int,
-                        help='How often do you want to display output images during training')
     parser.add_argument('--display_size', default=16, type=int,
                         help='How many images do you want to display each time')
     parser.add_argument('--snapshot_save_iter', default=10000, type=int,
@@ -45,11 +41,8 @@ class Config:
                         help='weight of content reconstruction loss')
     parser.add_argument('--recon_x_cyc_w', default=10, type=float,
                         help='weight of explicit style augmented cycle consistency loss')
-    parser.add_argument('--vgg_w', default=0, type=float,
-                        help='weight of domain-invariant perceptual loss')
     parser.add_argument('--g_comp', default=10, type=float,
                         help='weight of comp loss for geneartor')
-    parser.add_argument('--d_comp', default=0, type=float)
 
     # model options
     parser.add_argument('--gen_dim', default=64, type=int,
@@ -88,12 +81,6 @@ class Config:
                         help='number of image channels [1/3]')
     parser.add_argument('--num_workers', default=8, type=int,
                         help='number of data loading threads')
-    parser.add_argument('--new_size', default=256, type=int,
-                        help='first resize the shortest image side to this size')
-    parser.add_argument('--crop_image_height', default=256, type=int,
-                        help='random crop image of this height')
-    parser.add_argument('--crop_image_width', default=256, type=int,
-                        help='random crop image of this width')
     parser.add_argument('--data_root', default='./data', type=str,
                         help='dataset folder location')
 

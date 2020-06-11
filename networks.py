@@ -1,10 +1,9 @@
-from torch import nn
-from torch.autograd import Variable
 import torch
 import torch.nn.functional as F
 import network_utils as utils
 import torchvision.models as models
-
+import torch.nn as nn
+from torch.autograd import Variable
 from network_utils import NewInstanceNorm
 
 
