@@ -10,10 +10,9 @@ from torch.autograd import Variable
 
 if __name__ == '__main__':
     os.environ['CUDA_VISIBLE_DEVICES'] = '7'
-    device = torch.device('cuda:0') if torch.cuda.is_available() else torch.device('cpu')
-
     # load config
     config = Config().parser.parse_args()
+    device = torch.device('cuda:0') if torch.cuda.is_available() else torch.device('cpu')
     torch.backends.cudnn.benchmark = True
     seed = config.seed
     torch.manual_seed(seed)
@@ -23,14 +22,13 @@ if __name__ == '__main__':
     # Load experiment setting
     config.num_style = 1 if config.style != '' else config.num_style
     input_dim = config.input_dim_a if config.a2b else config.input_dim_b
+    style_dim = config.gen_style_dim
 
     # Setup model and data loader
     image_names = ImageFolder(config.input_folder, return_paths=True)
     data_loader = get_data_loader_folder(config.input_folder, 1, False)
 
-    style_dim = config.gen_style_dim
     trainer = Trainer(config).to(device)
-
     state_dict = torch.load(config.checkpoint)
     trainer.gen_a.load_state_dict(state_dict['a'])
     trainer.gen_b.load_state_dict(state_dict['b'])
@@ -51,7 +49,6 @@ if __name__ == '__main__':
             outputs = decode(content, s)
             outputs = (outputs + 1) / 2.
 
-            # path = os.path.join(opts.output_folder, 'input{:03d}_output{:03d}.jpg'.format(i, j))
             basename = os.path.basename(names[1])
             path = os.path.join(config.output_folder + "_%02d" % j, basename)
             if not os.path.exists(os.path.dirname(path)):

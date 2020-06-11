@@ -21,8 +21,8 @@ def train(it_id):
             trainer.gen_update(image_a, image_b, config)
 
             # Updating lr
-            trainer.gen_scheduler.step()
             trainer.dis_scheduler.step()
+            trainer.gen_scheduler.step()
 
             # Dump training stats in log file
             if (it_id + 1) % config.log_iter == 0:
