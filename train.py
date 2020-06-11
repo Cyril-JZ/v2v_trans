@@ -2,7 +2,7 @@ import torch
 import os
 import sys
 from config import Config
-from trainer import Trainer
+from model import Model
 from utils import get_all_data_loaders, prepare_sub_folder, write_loss
 from torch.utils.tensorboard import SummaryWriter
 
@@ -17,20 +17,20 @@ def train(it_id):
             image_b = image_b.cuda().detach() if torch.cuda.is_available() else image_b.detach()
 
             # Main training code
-            trainer.dis_update(image_a, image_b, config)
-            trainer.gen_update(image_a, image_b, config)
+            model.dis_update(image_a, image_b, config)
+            model.gen_update(image_a, image_b, config)
 
             # Updating lr
-            trainer.dis_scheduler.step()
-            trainer.gen_scheduler.step()
+            model.dis_scheduler.step()
+            model.gen_scheduler.step()
 
             # Dump training stats in log file
             if (it_id + 1) % config.log_iter == 0:
-                write_loss(it_id, trainer, train_writer)
+                write_loss(it_id, model, train_writer)
 
             # Save network weights
             if (it_id + 1) % config.snapshot_save_iter == 0:
-                trainer.save(checkpoint_directory, it_id)
+                model.save(checkpoint_directory, it_id)
 
             if it_id + 1 >= max_iter:
                 sys.exit('Finish training')
@@ -55,7 +55,7 @@ if __name__ == '__main__':
     train_display_images_b = torch.stack([train_loader_b.dataset[i] for i in range(display_size)]).to(device)
 
     # Main models
-    trainer = Trainer(config).to(device)
+    model = Model(config).to(device)
 
     # Setup logger and output folders
     model_name = config.model_name
@@ -64,7 +64,7 @@ if __name__ == '__main__':
     checkpoint_directory, image_directory = prepare_sub_folder(output_directory)
 
     # Start training
-    iterations = trainer.resume(checkpoint_dir=config.checkpoint, hyperparameters=config) if config.resume else 0
+    iterations = model.resume(checkpoint_dir=config.checkpoint, hyperparameters=config) if config.resume else 0
 
     print('Start training')
     train(iterations)
