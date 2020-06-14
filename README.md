@@ -20,13 +20,6 @@ For evaluating, run
 bash ./test_oilpainting.sh
 ```
 
-### Prepare Data
-
-
-
-### Results
-
-
 
 
 
